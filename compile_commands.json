@@ -1,0 +1,14 @@
+[
+{
+  "directory": ".",
+  "command": "/usr/bin/clang++ -DNDEBUG -Wall -Wextra -Wno-char-subscripts -Wsign-compare --target=arm -funsigned-char -nostdinc -nostdinc++ -isystem ../oscar64/include test240p.cpp",
+  "file": "./test240p.cpp",
+  "output": "./test240p.prg"
+},
+{
+  "directory": "../oscar64/include/c64",
+  "command": "/usr/bin/clang++ -DNDEBUG -Wall -Wextra -Wno-char-subscripts -Wsign-compare --target=arm -funsigned-char -nostdinc -nostdinc++ -isystem ../oscar64/include sprites.c",
+  "file": "../oscar64/include/c64/sprites.c",
+  "output": "../oscar64/include/c64/sprites.o"
+},
+]
