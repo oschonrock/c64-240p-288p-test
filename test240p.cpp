@@ -24,6 +24,40 @@ void dprint(char x, char y, const char* str) {
   }
 }
 
+void show_help(char mode) {
+  for (char y = 0; y < 22; y++) {
+    for (char x = 20; x < 40; x++) {
+      (screen + 40 * y)[x] = SCRC(' ');
+    }
+  }
+  switch (mode) {
+    case 0:
+      dprint(20, 0, SCRC("flicker test"));
+      dprint(20, 2, SCRC("you should see a"));
+      dprint(20, 3, SCRC("flickering black"));
+      dprint(20, 4, SCRC("shape. it should not"));
+      dprint(20, 5, SCRC("be striped."));
+      dprint(20, 7, SCRC("move it with joyst."));
+      dprint(20, 8, SCRC("no stripes or arti-"));
+      dprint(20, 9, SCRC("facts?"));
+      dprint(20, 11, SCRC("proves your display"));
+      dprint(20, 12, SCRC("understands c64 pro-"));
+      dprint(20, 13, SCRC("gressive signal."));
+      break;
+    case 1:
+      dprint(20, 0, SCRC("striped test"));
+      dprint(20, 2, SCRC("you should see a"));
+      dprint(20, 3, SCRC("solid black shape"));
+      dprint(20, 4, SCRC("on stripey bg."));
+      dprint(20, 6, SCRC("move it with joyst."));
+      dprint(20, 7, SCRC("will appear stripey"));
+      dprint(20, 8, SCRC("while moving vert."));
+      dprint(20, 10, SCRC("when stopped on even"));
+      dprint(20, 11, SCRC("row will disappear."));
+      break;
+  }
+}
+
 int main() {
   oscar_expand_lzo(sprites, sprite_data);
 
@@ -41,19 +75,21 @@ int main() {
   vic.color_back   = VCOL_LT_GREY;
   vic_setmode(VICM_TEXT, screen, charset);
   spr_init(screen);
-  unsigned xpos = 100;
+  unsigned xpos = 80;
   char     ypos = 101;
   spr_set(0, true, 0, 0, spr_offset + 0, VCOL_BLACK, false, false, false);
   spr_set(1, true, 0, 0, spr_offset + 1, VCOL_BLACK, false, false, false);
   spr_set(2, true, 0, 0, spr_offset + 2, VCOL_BLACK, false, false, false);
   spr_set(3, true, 0, 0, spr_offset + 3, VCOL_BLACK, false, false, false);
+
+  dprint(9, 22, SCRC("joystick port 2 - move shape   "));
+  dprint(9, 23, SCRC("f1 - drop shadow / flicker test"));
+  dprint(9, 24, SCRC("f3 - striped sprite test       "));
+
   bool shown   = true;
   bool flicker = true;
-
-  dprint(8, 22, SCRC("joystick port 2 - move shape"));
-  dprint(8, 23, SCRC("f1 - drop shadow / flicker test"));
-  dprint(8, 24, SCRC("f3 - striped sprite test"));
-
+  show_help(0);
+  
   while (true) {
     vic_waitFrame();
     joy_poll(0);
@@ -85,6 +121,9 @@ int main() {
         spr_image(2, spr_offset + 2);
         spr_image(3, spr_offset + 3);
         flicker = true;
+        show_help(0);
+        xpos = 80;
+        ypos = 101;
         break;
       case KSCAN_F3:
         // stripey bg ch
@@ -100,6 +139,9 @@ int main() {
         spr_image(3, spr_offset + 7);
         shown   = true;
         flicker = false;
+        show_help(1);
+        xpos = 80;
+        ypos = 101;
         break;
       }
     }
