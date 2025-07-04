@@ -2,7 +2,8 @@ This is a "240/288p test for the C64". Modelled on the "SNES
 240p test suite", specifically the "drop shadow test" and the "striped
 sprite test".
 
-To compile, download the oscar64 compiler, compile it, then clone this
+Just directly run the `.prg` from the latest release, Alternatively, 
+to compile, download the oscar64 compiler, compile it, then clone this
 repo and run `make`.
 
 Run the resulting binary on your C64 with LCD/CRT attached and give
