@@ -29,7 +29,7 @@ int main() {
 
   __asm { sei }
   mmap_set(MMAP_CHAR_ROM);
-  memcpy(charset, (char*)0xd000, 2048);
+  memcpy(charset, (char*)0xd000, 2048); // clone ROM chars so we can modify shift-space
   mmap_set(MMAP_ROM);
   __asm { cli }
 
