@@ -36,6 +36,15 @@
 *.exe
 *.out
 *.app
+*.asm
+*.csz
+*.int
+*.dbj
+*.lbl
+*.map
+*.prg
+/.cache/
 
 # debug information files
 *.dwo
+
