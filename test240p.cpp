@@ -63,10 +63,11 @@ static const char* help_text[2][14] = {
     },
 };
 
-static const char bgch          = 96; // shift space
-static const char mode_help_x   = 20;
-static const char global_help_x = 12;
-static const char global_help_y = 20;
+static const char bgch           = 96; // shift space
+static const char mode_help_x    = 20;
+static const char mode_help_ymax = 14;
+static const char global_help_x  = 12;
+static const char global_help_y  = 20;
 
 void show_help(char mode) {
   dprint(global_help_x, global_help_y + 0, SCRC("f1 - show / hide help"), 40);
@@ -101,6 +102,26 @@ void set_bg_char_even_rows(char rowval) {
   for (char i = 0; i < 4; i++) charset[bgch * 8 + (i * 2)] = rowval;
 }
 
+void clear_screen() {
+#pragma unroll(page)
+  for (unsigned i = 0; i < 1000; i++) {
+    screen[i] = bgch;
+  }
+}
+
+void set_color(char clr, bool help_shown) {
+  for (char y = 0; y < 25; y++) {
+    for (char x = 0; x < 40; x++) {
+      if (help_shown && ((y < mode_help_ymax && x >= mode_help_x) ||
+                         (y >= global_help_y && x >= global_help_x))) {
+        (color + y * 40)[x] = VCOL_BLACK;
+      } else {
+        (color + y * 40)[x] = clr;
+      }
+    }
+  }
+}
+
 int main() {
   oscar_expand_lzo(sprites, sprite_data);
 
@@ -110,8 +131,7 @@ int main() {
   mmap_set(MMAP_ROM);
   __asm { cli }
 
-  memset(screen, bgch, 1000);
-
+  clear_screen();
   vic.color_border = VCOL_LT_GREY;
   vic.color_back   = VCOL_LT_GREY;
   vic_setmode(VICM_TEXT, screen, charset);
@@ -168,37 +188,19 @@ int main() {
         break;
       }
     }
+    if (update_spr_image) {
+      set_spr_image(mode, clr);
+      set_color(clr, help_shown);
+      update_spr_image = false;
+    }
     if (update_help) {
-      update_spr_image = true;
       if (help_shown) {
         show_help(mode);
       } else {
-#pragma unroll(page)
-        for (unsigned i = 0; i < 1000; i++) {
-          screen[i] = bgch;
-        }
+        clear_screen();
       }
+      set_color(clr, help_shown);
       update_help = false;
-    }
-    if (update_spr_image) {
-      set_spr_image(mode, clr);
-#pragma unroll(page)
-      for (unsigned i = 0; i < 1000; i++) {
-        color[i] = clr;
-      }
-      if (help_shown) {
-        for (char y = global_help_y; y < 25; y++) {
-          for (char x = global_help_x; x < 40; x++) {
-            (color + y * 40)[x] = VCOL_BLACK;
-          }
-        }
-        for (char y = 0; y < 14; y++) {
-          for (char x = mode_help_x; x < 40; x++) {
-            (color + y * 40)[x] = VCOL_BLACK;
-          }
-        }
-      }
-      update_spr_image = false;
     }
   }
 
