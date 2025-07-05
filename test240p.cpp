@@ -66,7 +66,7 @@ static const char* help_text[2][14] = {
 static const char bgch           = 96; // shift space
 static const char mode_help_x    = 20;
 static const char mode_help_ymax = 14;
-static const char global_help_x  = 12;
+static const char global_help_x  = 14;
 static const char global_help_y  = 20;
 
 void show_help(char mode) {
@@ -74,7 +74,7 @@ void show_help(char mode) {
   dprint(global_help_x, global_help_y + 1, SCRC("f3 - drop shadow test"), 40);
   dprint(global_help_x, global_help_y + 2, SCRC("f5 - striped sprite test"), 40);
   dprint(global_help_x, global_help_y + 3, SCRC("1..8 - change shape color"), 40);
-  dprint(global_help_x, global_help_y + 4, SCRC("joystick port 2 - move shape"), 40);
+  dprint(global_help_x, global_help_y + 4, SCRC("js p2 - move, btn = faster"), 40);
 
   for (char i = 0; i < ARRAYSIZE(help_text[mode]); i++) {
     dprint(mode_help_x, i, help_text[mode][i], 40);
@@ -110,15 +110,17 @@ void clear_screen() {
 }
 
 void set_color(char clr, bool help_shown) {
+  char* cp = color;
   for (char y = 0; y < 25; y++) {
     for (char x = 0; x < 40; x++) {
-      if (help_shown && ((y < mode_help_ymax && x >= mode_help_x) ||
-                         (y >= global_help_y && x >= global_help_x))) {
-        (color + y * 40)[x] = VCOL_BLACK;
-      } else {
-        (color + y * 40)[x] = clr;
-      }
+      char c = (help_shown && ((y < mode_help_ymax && x >= mode_help_x) ||
+                               (y >= global_help_y && x >= global_help_x)))
+                   ? VCOL_BLACK
+                   : clr;
+
+      cp[x] = c;
     }
+    cp += 40;
   }
 }
 
@@ -150,8 +152,9 @@ int main() {
   while (true) {
     vic_waitFrame();
     joy_poll(0);
-    xpos += joyx[0];
-    ypos += joyy[0];
+    
+    xpos += (joyb[0] + 1) * joyx[0];
+    ypos += (joyb[0] + 1) * joyy[0];
     update_sprites(xpos, ypos, sprite_shown);
     if (mode == 0) sprite_shown = !sprite_shown;
 
@@ -203,6 +206,5 @@ int main() {
       update_help = false;
     }
   }
-
   return 0;
 }
