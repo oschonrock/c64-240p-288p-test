@@ -30,7 +30,7 @@ void dprint(char x, char y, const char* str, char xmax = 0) {
 
 static const char* help_text[2][14] = {
     {
-        SCRC("flicker test"),
+        SCRC("drop shadow test"),
         "",
         SCRC("you should see a"),
         SCRC("flickering shape."),
@@ -63,17 +63,20 @@ static const char* help_text[2][14] = {
     },
 };
 
-static const char bgch = 96; // shift space
+static const char bgch          = 96; // shift space
+static const char mode_help_x   = 20;
+static const char global_help_x = 12;
+static const char global_help_y = 20;
 
 void show_help(char mode) {
-  dprint(9, 20, SCRC("joystick port 2 - move shape"), 40);
-  dprint(9, 21, SCRC("1..8 - change shape color"), 40);
-  dprint(9, 22, SCRC("f1 - show / hide help"), 40);
-  dprint(9, 23, SCRC("f3 - drop shadow / flicker test"), 40);
-  dprint(9, 24, SCRC("f5 - striped sprite test"), 40);
+  dprint(global_help_x, global_help_y + 0, SCRC("f1 - show / hide help"), 40);
+  dprint(global_help_x, global_help_y + 1, SCRC("f3 - drop shadow test"), 40);
+  dprint(global_help_x, global_help_y + 2, SCRC("f5 - striped sprite test"), 40);
+  dprint(global_help_x, global_help_y + 3, SCRC("1..8 - change shape color"), 40);
+  dprint(global_help_x, global_help_y + 4, SCRC("joystick port 2 - move shape"), 40);
 
   for (char i = 0; i < ARRAYSIZE(help_text[mode]); i++) {
-    dprint(20, i, help_text[mode][i], 40);
+    dprint(mode_help_x, i, help_text[mode][i], 40);
   };
 }
 
@@ -119,9 +122,8 @@ int main() {
   char     ypos             = 101;
   bool     sprite_shown     = true;
   bool     help_shown       = true;
-443  char     mode             = 0;
+  char     mode             = 0;
   char     clr              = 0;
-  bool     flicker          = true;
   bool     update_help      = true;
   bool     update_spr_image = true;
 
@@ -131,7 +133,7 @@ int main() {
     xpos += joyx[0];
     ypos += joyy[0];
     update_sprites(xpos, ypos, sprite_shown);
-    if (flicker) sprite_shown = !sprite_shown;
+    if (mode == 0) sprite_shown = !sprite_shown;
 
     keyb_poll();
     if (keyb_key & KSCAN_QUAL_DOWN) {
@@ -142,7 +144,6 @@ int main() {
         break;
       case KSCAN_F3:
         set_bg_char_even_rows(0); // empty bg
-        flicker          = true;
         mode             = 0;
         update_help      = true;
         update_spr_image = true;
@@ -152,7 +153,6 @@ int main() {
       case KSCAN_F5:
         set_bg_char_even_rows(255); // stripey bg
         sprite_shown     = true;
-        flicker          = false;
         mode             = 1;
         update_help      = true;
         update_spr_image = true;
@@ -187,13 +187,13 @@ int main() {
         color[i] = clr;
       }
       if (help_shown) {
-        for (char y = 20; y < 25; y++) {
-          for (char x = 9; x < 40; x++) {
+        for (char y = global_help_y; y < 25; y++) {
+          for (char x = global_help_x; x < 40; x++) {
             (color + y * 40)[x] = VCOL_BLACK;
           }
         }
         for (char y = 0; y < 14; y++) {
-          for (char x = 20; x < 40; x++) {
+          for (char x = mode_help_x; x < 40; x++) {
             (color + y * 40)[x] = VCOL_BLACK;
           }
         }
