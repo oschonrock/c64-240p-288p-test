@@ -19,6 +19,18 @@ const char        sprite_data[] = {
 #embed spd_sprites lzo "sprites.spd"
 };
 
+const char char_data[] = {
+#embed ctm_chars lzo "grids.ctm"
+};
+
+static constexpr const char tiles[] = {
+#embed ctm_tiles8 "grids.ctm"
+};
+
+static constexpr const char map[] = {
+#embed ctm_map8 "grids.ctm"
+};
+
 void dprint(char x, char y, const char* str, char xmax = 0) {
   while (char ch = *str++) {
     (screen + 40 * y)[x++] = ch;
@@ -28,7 +40,7 @@ void dprint(char x, char y, const char* str, char xmax = 0) {
   }
 }
 
-static const char* help_text[2][14] = {
+static const char* help_text[3][16] = {
     {
         SCRC("drop shadow test"),
         "",
@@ -44,6 +56,8 @@ static const char* help_text[2][14] = {
         SCRC("proves your display"),
         SCRC("understands c64 pro-"),
         SCRC("gressive signal."),
+        "",
+        "",
     },
     {
         SCRC("striped sprite test"),
@@ -60,25 +74,59 @@ static const char* help_text[2][14] = {
         "",
         SCRC("otherwise no arti-"),
         SCRC("facts?"),
+        "",
+        "",
+    },
+    {
+        SCRC("scaling test"),
+        "",
+        SCRC("you should see a"),
+        SCRC("a set of grids on"),
+        SCRC("left. use magnifi-"),
+        SCRC("cation. count lcd"),
+        SCRC("pixels for each"),
+        SCRC("black square."),
+        "",
+        SCRC("find the grid which"),
+        SCRC("matches an integer"),
+        SCRC("number of pixels."),
+        "",
+        SCRC("the grids are"),
+        SCRC("1x1 => 12x12"),
+        SCRC("c64 pixels"),
     },
 };
 
-static const char bgch           = 96; // shift space
+static const char bgch           = 64; // special custom space
 static const char mode_help_x    = 20;
-static const char mode_help_ymax = 14;
+static const char mode_help_ymax = 16;
 static const char global_help_x  = 16;
-static const char global_help_y  = 20;
+static const char global_help_y  = 19;
 
 void show_help(char mode) {
   dprint(global_help_x, global_help_y + 0, SCRC("f1 - show / hide help"), 40);
   dprint(global_help_x, global_help_y + 1, SCRC("f3 - drop shadow test"), 40);
   dprint(global_help_x, global_help_y + 2, SCRC("f5 - striped sprite test"), 40);
-  dprint(global_help_x, global_help_y + 3, SCRC("1..8 - change color"), 40);
-  dprint(global_help_x, global_help_y + 4, SCRC("js p2 - move, btn=faster"), 40);
+  dprint(global_help_x, global_help_y + 3, SCRC("f7 - scaling test"), 40);
+  dprint(global_help_x, global_help_y + 4, SCRC("1..8 - change color"), 40);
+  dprint(global_help_x, global_help_y + 5, SCRC("js p2 - move, btn=faster"), 40);
 
   for (char i = 0; i < ARRAYSIZE(help_text[mode]); i++) {
     dprint(mode_help_x, i, help_text[mode][i], 40);
   };
+}
+
+void clear_help() {
+  for (char y = 0; y < mode_help_ymax; y++) {
+    for (char x = mode_help_x; x < 40; x++) {
+      (screen + 40 * y)[x] = bgch;
+    }
+  }
+  for (char y = global_help_y; y < 25; y++) {
+    for (char x = global_help_x; x < 40; x++) {
+      (screen + 40 * y)[x] = bgch;
+    }
+  }
 }
 
 void set_spr_image(char mode, char color) {
@@ -124,6 +172,43 @@ void set_color(char clr, bool help_shown) {
   }
 }
 
+void show_grids() {
+  const char  rows = 4;
+  const char  cols = 3;
+  const char* mp   = map;
+
+  char* sp = screen;
+
+  for (char y = 0; y < rows; y++) {
+    for (char x = 0; x < cols; x++) {
+      const char* tp = tiles + 9 * mp[x]; // cast to positive
+#pragma unroll(full)
+      for (char iy = 0; iy < 3; iy++) {
+#pragma unroll(full)
+        for (char ix = 0; ix < 3; ix++) {
+          char charnum = tp[3 * iy + ix];
+          char scridx  = 40 * iy + ix;
+          sp[scridx]   = charnum + 64;
+        }
+      }
+      sp += 3;
+    }
+    mp += cols;
+    sp += 2 * 40 + (40 - 3 * cols); // already cumulatively inc'd by 12 above
+  }
+}
+
+struct seqstep {
+  int dx;
+  int dy;
+  int scount; // -1 mean absolute jump
+};
+
+seqstep steps[] = {
+    {70, 75, -1}, {1, 1, 50},    {-1, 1, 50},  {-1, -1, 50},
+    {1, -1, 50},  {70, 175, -1}, {0, -1, 100}, {0, 1, 100},
+};
+
 int main() {
   oscar_expand_lzo(sprites, sprite_data);
 
@@ -132,6 +217,7 @@ int main() {
   memcpy(charset, (char*)0xd000, 2048); // clone ROM chars so we can modify shift-space
   mmap_set(MMAP_ROM);
   __asm { cli }
+  oscar_expand_lzo(charset + 64 * 8, char_data); // put custom grid chars staring at screen code 64
 
   clear_screen();
   vic.color_border = VCOL_LT_GREY;
@@ -148,17 +234,50 @@ int main() {
   char     clr              = 0;
   bool     update_help      = true;
   bool     update_spr_image = true;
-
+  bool     annimation       = false;
+  char     idle_cnt         = 0;
+  seqstep* step_ptr         = steps;
+  int      scnt             = step_ptr->scount;
   while (true) {
     vic_waitFrame();
     joy_poll(0);
-
-    if (mode == 0) {
-      xpos += (joyb[0] + 1) * joyx[0];
-      ypos += (joyb[0] + 1) * joyy[0];
-    } else { // dont' allow speed up in striped sprite test, because it can hide the sprite
-      xpos += joyx[0];
-      ypos += joyy[0];
+    if (joyx[0] != 0 || joyy[0] != 0) {
+      idle_cnt   = 0;
+      annimation = false;
+    }
+    if (annimation) {
+      if (scnt == -1) {
+        xpos = step_ptr->dx;
+        ypos = step_ptr->dy;
+        step_ptr++;
+        if (step_ptr == steps + ARRAYSIZE(steps)) step_ptr = steps;
+        scnt = step_ptr->scount;
+      } else {
+        xpos += step_ptr->dx;
+        ypos += step_ptr->dy;
+        scnt--;
+        if (!scnt) {
+          step_ptr++;
+          if (step_ptr == steps + ARRAYSIZE(steps)) step_ptr = steps;
+          scnt = step_ptr->scount;
+        }
+      }
+    } else {
+      if (joyx[0] == 0 && joyy[0] == 0) {
+        idle_cnt++;
+        if (++idle_cnt == 250) {
+          idle_cnt   = 0;
+          annimation = true;
+        }
+      } else {
+        if (mode == 0) {
+          xpos += (joyb[0] + 1) * joyx[0];
+          ypos += (joyb[0] + 1) * joyy[0];
+        } else { // dont' allow speed up in striped sprite test, because it can hide the sprite
+          xpos += joyx[0];
+          ypos += joyy[0];
+        }
+      }
     }
     update_sprites(xpos, ypos, sprite_shown);
     if (mode == 0) sprite_shown = !sprite_shown;
@@ -175,8 +294,9 @@ int main() {
         mode             = 0;
         update_help      = true;
         update_spr_image = true;
-        xpos             = 80;
-        ypos             = 101;
+        clear_screen();
+        step_ptr = steps;
+        scnt     = step_ptr->scount;
         break;
       case KSCAN_F5:
         set_bg_char_even_rows(255); // stripey bg
@@ -184,8 +304,16 @@ int main() {
         mode             = 1;
         update_help      = true;
         update_spr_image = true;
-        xpos             = 80;
-        ypos             = 101;
+        clear_screen();
+        step_ptr = steps;
+        scnt     = step_ptr->scount;
+        break;
+      case KSCAN_F7:
+        set_bg_char_even_rows(0); // empty bg
+        mode = 2;
+        show_grids();
+        sprite_shown = false;
+        update_help  = true;
         break;
       default:
         char ch = keyb_codes[keyb_key & 0x7f];
@@ -205,7 +333,7 @@ int main() {
       if (help_shown) {
         show_help(mode);
       } else {
-        clear_screen();
+        clear_help();
       }
       set_color(clr, help_shown);
       update_help = false;
