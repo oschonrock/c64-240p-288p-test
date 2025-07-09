@@ -19,7 +19,7 @@ FORCE:
 	x64sc -autostartprgmode 1 -autostart-warp +cart -moncommands $*.lbl -nativemonitor --silent $*.prg
 
 %.pro: %.cpp FORCE
-	~/c64/oscar64/bin/oscar64 -pp -ep -gp -dNOLONG -dNOFLOAT -DNDEBUG -DPROFILE -O2 -Ox $<
+	~/c64/oscar64/bin/oscar64 -pp -ep -gp -dNOLONG -dNOFLOAT -DNDEBUG -DPROFILE -O2 -xz -Oz -Ox $<
 
 
 clean:
