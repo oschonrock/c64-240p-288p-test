@@ -6,7 +6,6 @@
 #include <c64/vic.h>
 #include <opp/array.h>
 #include <oscar.h>
-#include <stdio.h>
 #include <string.h>
 
 #define ARRAYSIZE(arr) sizeof(arr) / sizeof(arr[0])
@@ -37,7 +36,7 @@ __interrupt void isr(void) {
           if (key_pressed(kc.scan_code)) {
             keyb_queue = kc.scan_code | KSCAN_QUAL_DOWN;
             if (kc.allow_shift && key_shift()) keyb_queue |= KSCAN_QUAL_SHIFT;
-            keyb_repeat = 4;
+            keyb_repeat = 5; // repeat 10x per second, paint and swap takes ~80ms
           }
         }
       }
@@ -50,11 +49,11 @@ __interrupt void isr(void) {
 
 char* const screens[] = {(char*)0x8000, (char*)0xc000};
 char* const hiress[]  = {(char*)0xa000, (char*)0xe000};
-char  bank = 0;
-char* hires_inact;
+char        bank      = 0;
+char*       hires_inact;
 
 char* const charrom = (char*)0xd000;
-char* const font    = (char*)0xc800;
+char* const font    = (char*)0xc400;
 
 void write_ch(char x, char y, char ch) {
   for (char chrow = 0; chrow < 8; chrow++) {
@@ -159,6 +158,7 @@ void switch_bank(char b) {
   bank        = b;
 }
 
+// write to inactive bank and switch it in
 void display(char x, char y, char size) {
   draw_grid(x, y, size);
   write_num(35, 0, size);
@@ -170,7 +170,7 @@ void display(char x, char y, char size) {
 RIRQCode rirq_isr;
 
 int main(void) {
-  __asm {cli}
+  __asm {sei}
   cia_init();
   mmap_set(MMAP_CHAR_ROM);
   memcpy(font, charrom, 128 * 8);
@@ -201,10 +201,7 @@ int main(void) {
   char y    = ys[1];
   char size = sizes[1];
 
-  char msgbuf[20];
-
   while (true) {
-
     if (keyb_queue & KSCAN_QUAL_DOWN) {
       char k     = keyb_queue & KSCAN_QUAL_MASK;
       keyb_queue = 0;
@@ -217,46 +214,32 @@ int main(void) {
         break;
       case KSCAN_EQUAL:
       case KSCAN_PLUS:
-        if (size < 60) {
-          clear(ys[bank^1], y, sizes[bank^1], size + 1);
-          ++size;
-        }
+        if (size < 60) ++size;
         break;
       case KSCAN_MINUS:
-        if (size > 1) {
-          clear(ys[bank^1], y, sizes[bank^1], size - 1);
-          --size;
-        }
+        if (size > 1) --size;
         break;
       case KSCAN_CSR_DOWN:
-        if (y < (200 - get_bcol_max(size) * size)) {
-          clear(ys[bank^1], y + 1, sizes[bank^1], size);
-          ++y;
-        }
+        if (y < (200 - get_bcol_max(size) * size)) ++y;
         break;
       case KSCAN_CSR_DOWN | KSCAN_QUAL_SHIFT:
-        if (y > 0) {
-          clear(ys[bank^1], y - 1, sizes[bank^1], size);
-          --y;
-        }
+        if (y > 0) --y;
         break;
       case KSCAN_CSR_RIGHT:
-        if (x < (maxchcols * 8 - get_bcol_max(size) * size)) {
-          clear(ys[bank^1], y + 1, sizes[bank^1], size);
-          ++x;
-        }
+        if (x < (maxchcols * 8 - get_bcol_max(size) * size)) ++x;
         break;
       case KSCAN_CSR_RIGHT | KSCAN_QUAL_SHIFT:
-        if (x > 0) {
-          clear(ys[bank^1], y + 1, sizes[bank^1], size);
-          --x;
-        }
+        if (x > 0) --x;
         break;
+      default:
+        continue;
       }
-      xs[bank ^1]    = x;
-      ys[bank ^1]    = y;
-      sizes[bank ^1] = size;
-      display(x, y, size); // switches banks
+      char ia = bank ^ 1;
+      clear(ys[ia], y, sizes[ia], size); // clear based on prev state of this inactive bank
+      xs[ia]    = x;                     // update inactive bank params
+      ys[ia]    = y;
+      sizes[ia] = size;
+      display(x, y, size);
     }
   }
   return 0;
