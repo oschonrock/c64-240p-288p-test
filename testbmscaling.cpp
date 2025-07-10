@@ -70,10 +70,14 @@ void write_str(char x, char y, const char* str) {
   while (char ch = *str++) write_ch(x++, y, ch);
 }
 
-void clear_all(char b) {
+void clear_all() {
 #pragma unroll(page)
   for (unsigned i = 0; i < 8000; i++) {
-    hiress[b][i] = 0;
+    hiress[0][i] = 0;
+  }
+#pragma unroll(page)
+  for (unsigned i = 0; i < 8000; i++) {
+    hiress[1][i] = 0;
   }
 }
 
@@ -91,7 +95,7 @@ __striped char* hires_ptrs1[200] = {
 };
 
 void clear_row(char y) {
-  char* rp = bank == 0 ? hires_ptrs1[y] : hires_ptrs0[y];
+  char* rp = bank == 0 ? hires_ptrs1[y] : hires_ptrs0[y]; // use inactive ptrs
   for (char i = 0; i < maxchcols; ++i) {
     *rp = 0;
     rp += 8;
@@ -141,7 +145,7 @@ void draw_grid(char xoffset, char yoffset, char size) {
   for (char brow = 0; brow < bcol_max; brow++) {
     bool even = !(brow & 1);
     for (char h = 0; h < size; h++) {
-      char* rp = bank == 0 ? hires_ptrs1[y] : hires_ptrs0[y];
+      char* rp = bank == 0 ? hires_ptrs1[y] : hires_ptrs0[y]; // use inactive ptrs
       for (char i = 0; i < maxchcols; ++i) {
         *rp = even ? evenrowbuf[i] : oddrowbuf[i];
         rp += 8;
@@ -188,8 +192,7 @@ int main(void) {
   rirq_sort();
   rirq_start();
 
-  clear_all(0);
-  clear_all(1);
+  clear_all();
   switch_bank(0);
   vic.color_border = VCOL_WHITE;
 
