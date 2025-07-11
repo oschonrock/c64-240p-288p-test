@@ -58,8 +58,13 @@ __striped const unsigned hires_row_offsets[200] = {
 #for (y, 200)(40 * 8 * (y >> 3) + (y & 7)),
 };
 
-char* get_ch_ptr(char x, char y) {
-  return hiress[iabank] + hires_row_offsets[y * 8] + 8 * x; // use inactive ptrs, y is in chars here
+// speed up tricky hires pointer maths for text character aligned usage
+__striped const unsigned hires_chrow_offsets[200] = {
+#for (row, 25)(40 * 8 * row),
+};
+
+char* get_ch_ptr(char col, char row) {
+  return hiress[iabank] + hires_chrow_offsets[row] + 8 * col; // use inactive ptrs
 }
 
 void write_ch(char* cp, char ch) {
@@ -83,15 +88,30 @@ void write_str(char x, char y, const char* str) {
   }
 }
 
-// clear hires area in both banks
+// clear hires area
+template <int Bank>
 void clear_all() {
 #pragma unroll(page)
   for (unsigned i = 0; i < 8000; i++) {
-    hiress[0][i] = 0;
+    hiress[Bank][i] = 0;
   }
+}
+
+// set color for whole screen
+template <int Bank>
+void set_color(char color) {
+#pragma unroll(page)
+  for (unsigned i = 0; i < 1000; i++) {
+    screens[Bank][i] = color;
+  }
+}
+
+// clone one hires bank to the other
+template <int SrcBank>
+void clone() {
 #pragma unroll(page)
   for (unsigned i = 0; i < 8000; i++) {
-    hiress[1][i] = 0;
+    hiress[SrcBank ^ 1][i] = hiress[SrcBank][i];
   }
 }
 
@@ -111,13 +131,13 @@ void clear_row(char y) {
 }
 
 // clear rows of pixels between 2 version of grid
-void clear(char yoffset, char yoffsetnew, char size, char newsize) {
-  for (char y = yoffset; y < yoffsetnew; y++) { // clear above
+void clear(char yoffset, char yoffset_new, char size, char size_new) {
+  for (char y = yoffset; y < yoffset_new; y++) { // clear above
     clear_row(y);
   }
 
   char ymax    = yoffset + get_bcol_max(size) * size;
-  char ymaxnew = yoffsetnew + get_bcol_max(newsize) * newsize;
+  char ymaxnew = yoffset_new + get_bcol_max(size_new) * size_new;
 
   for (char y = ymaxnew; y < ymax; y++) { // clear below
     clear_row(y);
@@ -164,16 +184,16 @@ void draw_grid(char xoffset, char yoffset, char size) {
   }
 }
 
-void switch_bank(char b) {
+void switch_bank(char b, bool switch_vic = true) {
   vic_waitFrame();
   bank   = b;
   iabank = bank ^ 1;
-  vic_setmode(VICM_HIRES, screens[bank], hiress[bank]);
+  if (switch_vic) vic_setmode(VICM_HIRES, screens[bank], hiress[bank]);
   hires_inact = hiress[iabank];
 }
 
 // write to inactive bank and switch it in
-void display(char x, char y, char size) {
+void render_grid(char x, char y, char size) {
   draw_grid(x, y, size);
   write_num(35, 0, size);
   write_num(35, 1, x);
@@ -199,22 +219,22 @@ int main(void) {
   rirq_sort();
   rirq_start();
 
-  clear_all();
-  vic.color_border = VCOL_WHITE;
-  memset(screens[0], VCOL_WHITE, 1000);
-  memset(screens[1], VCOL_WHITE, 1000);
-  for (char i = 0; i < 2; ++i) {
-    switch_bank(i);
-    write_str(22, 0, SCRC("block size = "));
-    write_str(26, 1, SCRC("origin =   ,  "));
-  }
-  switch_bank(0);
+  switch_bank(0, false); // set active bank, but don't switch vic yet
+  clear_all<1>();
+  set_color<1>(VCOL_WHITE);
+  write_str(22, 0, SCRC("block size = ")); // write on 1
+  write_str(26, 1, SCRC("origin =   ,  "));
 
   char xs[2]    = {0, 0};
   char ys[2]    = {0, 0};
   char sizes[2] = {15, 15};
-  display(xs[0], ys[0], sizes[0]);
-  char x    = xs[1];
+  render_grid(xs[1], ys[1], sizes[1]); // switches to bank 1
+  vic.color_border = VCOL_WHITE;
+  // prep other bank
+  set_color<0>(VCOL_WHITE);
+  clone<1>(); // copy from 1->0: incl clear, text and initial render
+
+  char x    = xs[1]; // running params
   char y    = ys[1];
   char size = sizes[1];
   while (true) {
@@ -253,7 +273,7 @@ int main(void) {
       xs[iabank]    = x;                         // update
       ys[iabank]    = y;                         // inactive bank
       sizes[iabank] = size;                      // params
-      display(x, y, size);
+      render_grid(x, y, size);
     }
   }
   return 0;
