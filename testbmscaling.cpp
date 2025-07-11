@@ -28,8 +28,7 @@ __interrupt void isr(void) {
       if (keyb_repeat)
         keyb_repeat--;
       else {
-        for (char i = 0; i < ARRAYSIZE(key_combos); ++i) {
-          const auto& kc = key_combos[i];
+        for (const auto& kc: key_combos) {
           if (key_pressed(kc.scan_code)) {
             keyb_queue = kc.scan_code | KSCAN_QUAL_DOWN;
             if (kc.allow_shift && key_shift()) keyb_queue |= KSCAN_QUAL_SHIFT;
@@ -54,22 +53,37 @@ char* hires_inact;
 char* const charrom = (char*)0xd000; // 1kB (first 128 screen codes) copied to font below
 char* const font    = (char*)0xc400; // used for display of chars
 
-void write_ch(char x, char y, char ch) {
+// speed up tricky hires pointer maths
+__striped const unsigned hires_row_offsets[200] = {
+#for (y, 200)(40 * 8 * (y >> 3) + (y & 7)),
+};
+
+char* get_ch_ptr(char x, char y) {
+  return hiress[iabank] + hires_row_offsets[y * 8] + 8 * x; // use inactive ptrs, y is in chars here
+}
+
+void write_ch(char* cp, char ch) {
+  char* fp = font + ch * 8;
   for (char chrow = 0; chrow < 8; chrow++) {
-    hires_inact[y * 40 * 8 + 8 * x + chrow] = font[ch * 8 + chrow];
+    cp[chrow] = fp[chrow];
   }
 }
 
 void write_num(char x, char y, char n) {
-  write_ch(x + 0, y, n / 10 + '0');
-  write_ch(x + 1, y, n % 10 + '0');
+  char* p = get_ch_ptr(x, y);
+  write_ch(p, n / 10 + '0');
+  write_ch(p + 8, n % 10 + '0');
 }
 
 void write_str(char x, char y, const char* str) {
-  while (char ch = *str++) write_ch(x++, y, ch);
+  char* cp = get_ch_ptr(x, y);
+  while (char ch = *str++) {
+    write_ch(cp, ch);
+    cp += 8;
+  }
 }
 
-// clear hirea area in both banks
+// clear hires area in both banks
 void clear_all() {
 #pragma unroll(page)
   for (unsigned i = 0; i < 8000; i++) {
@@ -88,13 +102,8 @@ char get_bcol_max(char size) {
   return ((maxchcols - 5) * 8) / size;
 }
 
-// speed up tricky hires pointer maths
-__striped unsigned hires_offsets[200] = {
-#for (y, 200)(40 * 8 * (y >> 3) + (y & 7)),
-};
-
 void clear_row(char y) {
-  char* rp = hiress[iabank] + hires_offsets[y]; // use inactive ptrs
+  char* rp = hiress[iabank] + hires_row_offsets[y]; // use inactive ptrs
   for (char i = 0; i < maxchcols; ++i) {
     *rp = 0;
     rp += 8;
@@ -145,7 +154,7 @@ void draw_grid(char xoffset, char yoffset, char size) {
   for (char brow = 0; brow < bcol_max; brow++) {
     bool even = !(brow & 1);
     for (char h = 0; h < size; h++) {
-      char* rp = hiress[iabank] + hires_offsets[y]; // use inactive ptrs
+      char* rp = hiress[iabank] + hires_row_offsets[y]; // use inactive ptrs
       for (char i = 0; i < maxchcols; ++i) {
         *rp = even ? evenrowbuf[i] : oddrowbuf[i];
         rp += 8;
@@ -157,8 +166,8 @@ void draw_grid(char xoffset, char yoffset, char size) {
 
 void switch_bank(char b) {
   vic_waitFrame();
-  bank        = b;
-  iabank      = bank ^ 1;
+  bank   = b;
+  iabank = bank ^ 1;
   vic_setmode(VICM_HIRES, screens[bank], hiress[bank]);
   hires_inact = hiress[iabank];
 }
@@ -179,9 +188,6 @@ int main(void) {
   cia_init();
   mmap_set(MMAP_CHAR_ROM);
   memcpy(font, charrom, 128 * 8);
-  mmap_set(MMAP_RAM);
-  memset(screens[0], 0x01, 1000);
-  memset(screens[1], 0x01, 1000);
   mmap_set(MMAP_NO_ROM);
 
   rirq_init_io();
@@ -194,8 +200,15 @@ int main(void) {
   rirq_start();
 
   clear_all();
-  switch_bank(0);
   vic.color_border = VCOL_WHITE;
+  memset(screens[0], VCOL_WHITE, 1000);
+  memset(screens[1], VCOL_WHITE, 1000);
+  for (char i = 0; i < 2; ++i) {
+    switch_bank(i);
+    write_str(22, 0, SCRC("block size = "));
+    write_str(26, 1, SCRC("origin =   ,  "));
+  }
+  switch_bank(0);
 
   char xs[2]    = {0, 0};
   char ys[2]    = {0, 0};
@@ -210,7 +223,6 @@ int main(void) {
       keyb_queue = 0;
       switch (k) {
       case KSCAN_HOME:
-        clear(y, 0, size, 15);
         x    = 0;
         y    = 0;
         size = 15;
@@ -238,9 +250,9 @@ int main(void) {
         continue; // ignore unrecognised keys, don't clear/display/update params
       }
       clear(ys[iabank], y, sizes[iabank], size); // clear based on prev state of the inactive bank
-      xs[iabank]    = x;                     // update
-      ys[iabank]    = y;                     // inactive bank
-      sizes[iabank] = size;                  // params
+      xs[iabank]    = x;                         // update
+      ys[iabank]    = y;                         // inactive bank
+      sizes[iabank] = size;                      // params
       display(x, y, size);
     }
   }
